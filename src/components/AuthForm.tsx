@@ -10,6 +10,7 @@ export default function AuthForm() {
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const { signUp, signIn, user } = useAuth();
   const location = useLocation();
@@ -23,6 +24,15 @@ export default function AuthForm() {
     try {
       if (isSignUp) {
         await signUp(email, password, fullName, username);
+        // Show confirmation instructing the user to confirm their email
+        setSuccess('Account created — please check your email to confirm your address before signing in.');
+        // clear form fields except keep isSignUp so user sees message
+        setEmail('');
+        setPassword('');
+        setFullName('');
+        setUsername('');
+        setError('');
+        return;
       } else {
         await signIn(email, password);
       }
@@ -126,6 +136,11 @@ export default function AuthForm() {
           {error && (
             <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm">
               {error}
+            </div>
+          )}
+          {success && (
+            <div className="bg-green-50 text-green-800 px-4 py-3 rounded-lg text-sm">
+              {success}
             </div>
           )}
 
