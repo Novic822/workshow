@@ -63,6 +63,12 @@ export default function AddPlaceModal({ onClose, onPlaceAdded }: AddPlaceModalPr
     e.preventDefault();
     if (!user) return;
 
+    // Ensure auto-filled fields are present (name, country, latitude, longitude)
+    if (!name.trim() || !country.trim() || !latitude.toString().trim() || !longitude.toString().trim()) {
+      setError('Please select a location from the search suggestions to autofill Place Name, Country, Latitude and Longitude.');
+      return;
+    }
+
     setError('');
     setLoading(true);
 
@@ -153,6 +159,7 @@ export default function AddPlaceModal({ onClose, onPlaceAdded }: AddPlaceModalPr
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              disabled
               required
               placeholder="e.g., Taghazout"
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none"
@@ -167,6 +174,7 @@ export default function AddPlaceModal({ onClose, onPlaceAdded }: AddPlaceModalPr
               type="text"
               value={country}
               onChange={(e) => setCountry(e.target.value)}
+              disabled
               required
               placeholder="e.g., Morocco"
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none"
@@ -183,6 +191,7 @@ export default function AddPlaceModal({ onClose, onPlaceAdded }: AddPlaceModalPr
                 step="any"
                 value={latitude}
                 onChange={(e) => setLatitude(e.target.value)}
+                disabled
                 required
                 placeholder="30.5369"
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none"
@@ -197,6 +206,7 @@ export default function AddPlaceModal({ onClose, onPlaceAdded }: AddPlaceModalPr
                 step="any"
                 value={longitude}
                 onChange={(e) => setLongitude(e.target.value)}
+                disabled
                 required
                 placeholder="-9.7686"
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none"
@@ -246,7 +256,7 @@ export default function AddPlaceModal({ onClose, onPlaceAdded }: AddPlaceModalPr
             </button>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !name.trim() || !country.trim() || !latitude.toString().trim() || !longitude.toString().trim()}
               className="flex-1 px-4 py-2 bg-teal-500 text-white rounded-lg hover:bg-teal-600 transition font-medium disabled:opacity-50"
             >
               {loading ? 'Adding...' : 'Add Place'}

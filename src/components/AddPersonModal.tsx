@@ -85,6 +85,12 @@ export default function AddPersonModal({ onClose, onPersonAdded }: AddPersonModa
     e.preventDefault();
     if (!user) return;
 
+    // Ensure required fields are present
+    if (!name.trim() || !placeId.trim() || !homeCountry.trim() || !homeLatitude.toString().trim() || !homeLongitude.toString().trim()) {
+      setError('Please fill all required fields (Name, Where did you meet?, and select a home country from suggestions to autofill Latitude/Longitude).');
+      return;
+    }
+
     setError('');
     setLoading(true);
 
@@ -216,36 +222,39 @@ export default function AddPersonModal({ onClose, onPersonAdded }: AddPersonModa
               value={homeCountry}
               onChange={(e) => setHomeCountry(e.target.value)}
               required
+              disabled
               placeholder="e.g., France"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none bg-gray-50 disabled:opacity-90"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Home Latitude
+                Home Latitude *
               </label>
               <input
                 type="number"
                 step="any"
                 value={homeLatitude}
                 onChange={(e) => setHomeLatitude(e.target.value)}
+                disabled
                 placeholder="48.8566"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none bg-gray-50 disabled:opacity-90"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Home Longitude
+                Home Longitude *
               </label>
               <input
                 type="number"
                 step="any"
                 value={homeLongitude}
                 onChange={(e) => setHomeLongitude(e.target.value)}
+                disabled
                 placeholder="2.3522"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none bg-gray-50 disabled:opacity-90"
               />
             </div>
           </div>
@@ -305,7 +314,15 @@ export default function AddPersonModal({ onClose, onPersonAdded }: AddPersonModa
             </button>
             <button
               type="submit"
-              disabled={loading || places.length === 0}
+              disabled={
+                loading ||
+                places.length === 0 ||
+                !name.trim() ||
+                !placeId.trim() ||
+                !homeCountry.trim() ||
+                !homeLatitude.toString().trim() ||
+                !homeLongitude.toString().trim()
+              }
               className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition font-medium disabled:opacity-50"
             >
               {loading ? 'Adding...' : 'Add Person'}
