@@ -156,8 +156,8 @@ export default function Dashboard() {
                 <MapPin className="w-5 h-5 text-teal-500 mr-2" />
                 Recent Places
               </h3>
-              <div className="space-y-3">
-                {places.slice(0, 5).map((place) => (
+              <div className="space-y-3 max-h-[468px] overflow-y-auto">
+                {places.map((place) => (
                   <div
                     key={place.id}
                     className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition"
@@ -190,8 +190,8 @@ export default function Dashboard() {
                 <UserIcon className="w-5 h-5 text-blue-500 mr-2" />
                 Recent Connections
               </h3>
-              <div className="space-y-3">
-                {people.slice(0, 5).map((person) => (
+              <div className="space-y-3 max-h-[468px] overflow-y-auto">
+                {people.map((person) => (
                   <div
                     key={person.id}
                     className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition"
@@ -213,6 +213,10 @@ export default function Dashboard() {
                       {person.place && (
                         <p className="text-xs text-gray-500">Met in {person.place.name}</p>
                       )}
+                      {person.description && (
+                        <p className="text-sm text-gray-700 mt-1">{person.description}</p>
+                      )}
+
                     </div>
                   </div>
                 ))}

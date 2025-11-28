@@ -44,6 +44,54 @@ export default function WorldMap({ places, people, onPlaceClick, onPersonClick }
   const center: LatLngExpression = [20, 0];
   const zoom = 2;
 
+  // When multiple people share the exact same coordinates, offset their markers
+  // slightly so they don't overlap. We compute a small circular offset (in meters)
+  // and convert to degrees. This keeps markers visible while keeping them near
+  // the original point.
+  const computePersonPositions = () => {
+    const groups: Record<string, Person[]> = {};
+
+    people.forEach((p) => {
+      if (!p.home_latitude || !p.home_longitude) return;
+      const key = `${p.home_latitude}_${p.home_longitude}`;
+      groups[key] = groups[key] || [];
+      groups[key].push(p);
+    });
+
+    const positions: Record<string, [number, number]> = {};
+
+    for (const key of Object.keys(groups)) {
+      const group = groups[key];
+      if (group.length === 1) {
+        const p = group[0];
+        positions[p.id] = [Number(p.home_latitude), Number(p.home_longitude)];
+        continue;
+      }
+
+      // multiple people at same spot -> spread them around a small circle
+      const radiusMeters = 100; // spread radius in meters (was 25)
+      group.forEach((p, idx) => {
+        const angle = (idx / group.length) * Math.PI * 2;
+        const dy = Math.sin(angle) * radiusMeters; // north-south meters
+        const dx = Math.cos(angle) * radiusMeters; // east-west meters
+
+        const lat = Number(p.home_latitude);
+        const lon = Number(p.home_longitude);
+
+        // approximate conversion: 1 deg latitude ~ 111320 meters
+        const deltaLat = dy / 111320;
+        // longitude degree length depends on latitude
+        const deltaLon = dx / (111320 * Math.cos((lat * Math.PI) / 180) || 1);
+
+        positions[p.id] = [lat + deltaLat, lon + deltaLon];
+      });
+    }
+
+    return positions;
+  };
+
+  const personPositions = computePersonPositions();
+
   return (
     <div className="w-full h-full rounded-lg overflow-hidden shadow-lg">
       <MapContainer
@@ -95,10 +143,12 @@ export default function WorldMap({ places, people, onPlaceClick, onPersonClick }
         {people.map((person) => {
           if (!person.home_latitude || !person.home_longitude) return null;
 
+          const adjusted = personPositions[person.id] || [Number(person.home_latitude), Number(person.home_longitude)];
+
           return (
             <Marker
               key={person.id}
-              position={[person.home_latitude, person.home_longitude]}
+              position={adjusted}
               icon={personIcon}
             >
               <Popup>
@@ -117,9 +167,6 @@ export default function WorldMap({ places, people, onPlaceClick, onPersonClick }
                       alt={person.name}
                       className="w-full h-32 object-cover rounded mb-2"
                     />
-                  )}
-                  {person.description && (
-                    <p className="text-sm text-gray-700 mb-3">{person.description}</p>
                   )}
                   <button
                     onClick={() => onPersonClick?.(person)}
