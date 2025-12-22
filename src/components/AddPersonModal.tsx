@@ -8,6 +8,12 @@ interface AddPersonModalProps {
   onPersonAdded: () => void;
 }
 
+interface FriendProfile {
+  id: string;
+  username?: string;
+  display_name?: string;
+}
+
 interface LocationSuggestion {
   display_name: string;
   lat: string;
@@ -20,6 +26,8 @@ interface LocationSuggestion {
 export default function AddPersonModal({ onClose, onPersonAdded }: AddPersonModalProps) {
   const { user } = useAuth();
   const [places, setPlaces] = useState<Place[]>([]);
+  const [friends, setFriends] = useState<FriendProfile[]>([]);
+  const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>([]);
   const [name, setName] = useState('');
   const [placeId, setPlaceId] = useState('');
   const [homeCountry, setHomeCountry] = useState('');
@@ -36,6 +44,7 @@ export default function AddPersonModal({ onClose, onPersonAdded }: AddPersonModa
 
   useEffect(() => {
     loadPlaces();
+    loadFriends();
   }, [user]);
 
   const loadPlaces = async () => {
@@ -52,6 +61,45 @@ export default function AddPersonModal({ onClose, onPersonAdded }: AddPersonModa
     } else {
       setPlaces(data || []);
     }
+  };
+
+  const loadFriends = async () => {
+    if (!user) return;
+
+    const { data: relations, error } = await supabase
+      .from('friendships')
+      .select('user_id_1, user_id_2')
+      .or(`user_id_1.eq.${user.id},user_id_2.eq.${user.id}`);
+
+    if (error) {
+      console.error('Error loading friends:', error);
+      return;
+    }
+
+    const friendIds = Array.from(
+      new Set(
+        (relations || [])
+          .map((r) => (r.user_id_1 === user.id ? r.user_id_2 : r.user_id_1))
+          .filter(Boolean)
+      )
+    );
+
+    if (friendIds.length === 0) {
+      setFriends([]);
+      return;
+    }
+
+    const { data: profiles, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, username, display_name')
+      .in('id', friendIds);
+
+    if (profileError) {
+      console.error('Error loading friend profiles:', profileError);
+      return;
+    }
+
+    setFriends((profiles || []) as FriendProfile[]);
   };
 
   const searchLocation = async () => {
@@ -95,21 +143,77 @@ export default function AddPersonModal({ onClose, onPersonAdded }: AddPersonModa
     setLoading(true);
 
     try {
-      const { error: insertError } = await supabase.from('people').insert([
-        {
-          user_id: user.id,
-          place_id: placeId,
-          name,
-          home_country: homeCountry,
-          home_latitude: homeLatitude ? parseFloat(homeLatitude) : null,
-          home_longitude: homeLongitude ? parseFloat(homeLongitude) : null,
-          description,
-          instagram_handle: instagramHandle || null,
-          photo_url: photoUrl || null,
-        },
-      ]);
+      const { data: personRow, error: insertError } = await supabase
+        .from('people')
+        .insert([
+          {
+            user_id: user.id,
+            place_id: placeId,
+            name,
+            home_country: homeCountry,
+            home_latitude: homeLatitude ? parseFloat(homeLatitude) : null,
+            home_longitude: homeLongitude ? parseFloat(homeLongitude) : null,
+            description,
+            instagram_handle: instagramHandle || null,
+            photo_url: photoUrl || null,
+          },
+        ])
+        .select('id')
+        .single();
 
       if (insertError) throw insertError;
+      if (!personRow) throw new Error('Failed to create person');
+
+      const linkRows = [
+        {
+          user_id: user.id,
+          person_id: personRow.id,
+          place_id: placeId,
+          met_at: null,
+          notes: description || null,
+        },
+        ...selectedFriendIds.map((fid) => ({
+          user_id: fid,
+          person_id: personRow.id,
+          place_id: placeId,
+          met_at: null,
+          notes: description || null,
+        })),
+      ];
+
+      const { error: linkError } = await supabase
+        .from('user_people')
+        .upsert(linkRows, { onConflict: 'user_id,person_id' });
+
+      if (linkError) throw linkError;
+
+      const { data: encounterRow, error: encounterError } = await supabase
+        .from('encounters')
+        .insert([
+          {
+            person_id: personRow.id,
+            place_id: placeId || null,
+            met_at: null,
+            created_by_user_id: user.id,
+          },
+        ])
+        .select('id')
+        .single();
+
+      if (!encounterError && encounterRow) {
+        const participants = [user.id, ...selectedFriendIds].map((uid) => ({
+          encounter_id: encounterRow.id,
+          user_id: uid,
+        }));
+
+        const { error: participantError } = await supabase
+          .from('encounter_participants')
+          .upsert(participants);
+
+        if (participantError) {
+          console.warn('Encounter participants warning:', participantError.message);
+        }
+      }
 
       onPersonAdded();
       onClose();
@@ -257,6 +361,39 @@ export default function AddPersonModal({ onClose, onPersonAdded }: AddPersonModa
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none bg-gray-50 disabled:opacity-90"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Met with friend(s) (optional)
+            </label>
+            {friends.length === 0 ? (
+              <p className="text-sm text-gray-500">No friends found. Add friends first to share this person with them.</p>
+            ) : (
+              <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-lg divide-y">
+                {friends.map((f) => {
+                  const checked = selectedFriendIds.includes(f.id);
+                  const label = f.display_name || f.username || f.id;
+                  return (
+                    <label key={f.id} className="flex items-center gap-3 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() =>
+                          setSelectedFriendIds((prev) =>
+                            prev.includes(f.id)
+                              ? prev.filter((id) => id !== f.id)
+                              : [...prev, f.id]
+                          )
+                        }
+                        className="h-4 w-4"
+                      />
+                      <span className="text-gray-800">{label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div>

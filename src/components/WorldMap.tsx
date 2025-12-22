@@ -1,6 +1,7 @@
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import { Icon, LatLngExpression } from 'leaflet';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import HeatmapLayer from './HeatmapLayer';
 import 'leaflet/dist/leaflet.css';
 import { Place, Person } from '../lib/supabase';
 import { MapPin, User } from 'lucide-react';
@@ -91,6 +92,12 @@ export default function WorldMap({ places, people, onPlaceClick, onPersonClick }
   };
 
   const personPositions = computePersonPositions();
+  const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
+  const [showHeatmap, setShowHeatmap] = useState(false);
+
+  const heatPoints = places
+    .filter((p) => p.latitude != null && p.longitude != null)
+    .map((p) => [Number(p.latitude), Number(p.longitude), 1] as [number, number, number]);
 
   return (
     <div className="w-full h-full rounded-lg overflow-hidden shadow-lg">
@@ -100,11 +107,25 @@ export default function WorldMap({ places, people, onPlaceClick, onPersonClick }
         style={{ height: '100%', width: '100%' }}
         className="z-0"
       >
+        {/* Heatmap toggle button - simple overlay */}
+        <div className="absolute top-3 right-3 z-20">
+          <button
+            onClick={() => setShowHeatmap((s) => !s)}
+            className="bg-white/90 backdrop-blur px-3 py-1 rounded-md border border-gray-200 shadow-sm text-sm"
+            title="Toggle heatmap"
+          >
+            {showHeatmap ? 'Hide heatmap' : 'Show heatmap'}
+          </button>
+        </div>
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <MapUpdater center={center} zoom={zoom} />
+
+        {showHeatmap && heatPoints.length > 0 && (
+          <HeatmapLayer points={heatPoints} options={{ radius: 30, blur: 20 }} />
+        )}
 
         {places.map((place) => (
           <Marker
@@ -169,7 +190,10 @@ export default function WorldMap({ places, people, onPlaceClick, onPersonClick }
                     />
                   )}
                   <button
-                    onClick={() => onPersonClick?.(person)}
+                    onClick={() => {
+                      setSelectedPerson(person);
+                      onPersonClick?.(person);
+                    }}
                     className="text-blue-600 hover:text-blue-700 text-sm font-medium"
                   >
                     View details
@@ -180,6 +204,32 @@ export default function WorldMap({ places, people, onPlaceClick, onPersonClick }
           );
         })}
       </MapContainer>
+
+      {selectedPerson && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black bg-opacity-50" onClick={() => setSelectedPerson(null)} />
+          <div className="bg-white rounded-xl shadow-lg max-w-md w-full z-10 overflow-auto">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="text-lg font-semibold">{selectedPerson.name}</h3>
+              <button className="text-gray-500" onClick={() => setSelectedPerson(null)}>Close</button>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-sm text-gray-600">From: {selectedPerson.home_country}</p>
+              {selectedPerson.photo_url && (
+                <img src={selectedPerson.photo_url} alt={selectedPerson.name} className="w-full h-48 object-cover rounded" />
+              )}
+              {selectedPerson.description ? (
+                <p className="text-sm text-gray-700">{selectedPerson.description}</p>
+              ) : (
+                <p className="text-sm text-gray-500">No description provided.</p>
+              )}
+              {selectedPerson.place?.name && (
+                <p className="text-sm text-gray-600">Met in: {selectedPerson.place.name}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -41,47 +41,35 @@ export default function FriendPage() {
 
             // load people for friend and include their place (if any)
             const { data: ppl, error: pe } = await supabase
-                .from('people')
-                .select('id,user_id,place_id,name,home_country,home_latitude,home_longitude,description,instagram_handle,photo_url,created_at,updated_at, place:places(id,name,country,latitude,longitude,photo_url,description)')
+                .from('user_people')
+                .select('person:people(id,user_id,place_id,name,home_country,home_latitude,home_longitude,description,instagram_handle,photo_url,created_at,updated_at)')
                 .eq('user_id', friendId);
 
             if (pe) {
                 console.error('Error loading people for friend:', pe);
                 setMapPeople([]);
             } else {
-                const mapped = (ppl ?? []).map((p: any) => {
-                    const rawPlace = Array.isArray(p.place) ? p.place[0] : p.place;
-                    const placeObj = rawPlace
-                        ? {
-                              id: rawPlace.id,
-                              user_id: rawPlace.user_id ?? '',
-                              name: rawPlace.name,
-                              country: rawPlace.country,
-                              latitude: rawPlace.latitude,
-                              longitude: rawPlace.longitude,
-                              description: rawPlace.description,
-                              photo_url: rawPlace.photo_url ?? null,
-                              created_at: rawPlace.created_at ?? '',
-                              updated_at: rawPlace.updated_at ?? '',
-                          }
-                        : undefined;
-
+                const mapped = (ppl ?? [])
+                  .map((row: any) => {
+                    const p = row.person;
+                    if (!p) return null;
                     return {
-                        id: p.id,
-                        user_id: p.user_id,
-                        place_id: p.place_id,
-                        name: p.name,
-                        home_country: p.home_country,
-                        home_latitude: p.home_latitude,
-                        home_longitude: p.home_longitude,
-                        description: p.description,
-                        instagram_handle: p.instagram_handle,
-                        photo_url: p.photo_url ?? null,
-                        created_at: p.created_at,
-                        updated_at: p.updated_at,
-                        place: placeObj,
+                      id: p.id,
+                      user_id: friendId,
+                      place_id: p.place_id,
+                      name: p.name,
+                      home_country: p.home_country,
+                      home_latitude: p.home_latitude,
+                      home_longitude: p.home_longitude,
+                      description: p.description,
+                      instagram_handle: p.instagram_handle,
+                      photo_url: p.photo_url ?? null,
+                      created_at: p.created_at,
+                      updated_at: p.updated_at,
                     } as Person;
-                });
+                  })
+                  .filter(Boolean) as Person[];
+
                 setMapPeople(mapped);
             }
         } catch (err) {

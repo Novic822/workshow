@@ -33,8 +33,8 @@ export default function Dashboard() {
             .order('created_at', { ascending: false }),
 
         supabase
-            .from('people')
-            .select('*, place:places(*)')
+            .from('user_people')
+            .select('person:people(*, place:places(*))')
             .eq('user_id', user.id)
             .order('created_at', { ascending: false }),
       ]);
@@ -43,7 +43,119 @@ export default function Dashboard() {
       if (peopleResult.error) throw peopleResult.error;
 
       setPlaces(placesResult.data || []);
-      setPeople(peopleResult.data || []);
+
+      const mappedPeople = (peopleResult.data || [])
+        .map((row: any) => {
+          const p = row.person;
+          if (!p) return null;
+          const rawPlace = Array.isArray(p.place) ? p.place[0] : p.place;
+          const placeObj = rawPlace
+            ? {
+                id: rawPlace.id,
+                user_id: rawPlace.user_id ?? user.id,
+                name: rawPlace.name,
+                country: rawPlace.country,
+                latitude: rawPlace.latitude,
+                longitude: rawPlace.longitude,
+                description: rawPlace.description,
+                photo_url: rawPlace.photo_url ?? null,
+                created_at: rawPlace.created_at ?? '',
+                updated_at: rawPlace.updated_at ?? '',
+              }
+            : undefined;
+
+          return {
+            id: p.id,
+            user_id: user.id,
+            place_id: p.place_id,
+            name: p.name,
+            home_country: p.home_country,
+            home_latitude: p.home_latitude,
+            home_longitude: p.home_longitude,
+            description: p.description,
+            instagram_handle: p.instagram_handle,
+            photo_url: p.photo_url ?? null,
+            created_at: p.created_at,
+            updated_at: p.updated_at,
+            place: placeObj,
+          } as Person;
+        })
+        .filter(Boolean) as Person[];
+
+      // Build "met with" names from encounters/participants (any encounter you are in)
+      let metWithMap: Record<string, string[]> = {};
+      const personIds = mappedPeople.map((p) => p.id);
+
+      if (personIds.length > 0) {
+        // Encounters you created
+        const { data: createdEncounters, error: createdErr } = await supabase
+          .from('encounters')
+          .select('id, person_id')
+          .in('person_id', personIds)
+          .eq('created_by_user_id', user.id);
+
+        // Encounters where you are a participant (even if not creator)
+        const { data: participation, error: partFetchErr } = await supabase
+          .from('encounter_participants')
+          .select('encounter_id')
+          .eq('user_id', user.id);
+
+        const participantEncounterIds = participation?.map((p) => p.encounter_id) || [];
+
+        const { data: participantEncounters, error: participantEncErr } = participantEncounterIds.length
+          ? await supabase
+              .from('encounters')
+              .select('id, person_id')
+              .in('person_id', personIds)
+              .in('id', participantEncounterIds)
+          : { data: [], error: null };
+
+        if (!createdErr && !participantEncErr) {
+          const encounters = [...(createdEncounters || []), ...(participantEncounters || [])];
+          const encounterIds = encounters.map((e) => e.id);
+
+          const { data: participants, error: partErr } = encounterIds.length
+            ? await supabase
+                .from('encounter_participants')
+                .select('encounter_id, user_id')
+                .in('encounter_id', encounterIds)
+            : { data: [], error: null };
+
+          if (!partErr && participants) {
+            const participantUserIds = Array.from(new Set(participants.map((p) => p.user_id)));
+            const { data: profiles, error: profErr } = participantUserIds.length
+              ? await supabase
+                  .from('profiles')
+                  .select('id, display_name, username')
+                  .in('id', participantUserIds)
+              : { data: [], error: null };
+
+            const profileMap = new Map<string, string>();
+            if (!profErr && profiles) {
+              profiles.forEach((pr: any) => {
+                profileMap.set(pr.id, pr.display_name || pr.username || pr.id);
+              });
+            }
+
+            encounters.forEach((enc) => {
+              const names = participants
+                .filter((p) => p.encounter_id === enc.id && p.user_id !== user.id)
+                .map((p) => profileMap.get(p.user_id) || p.user_id);
+              const uniqueNames = Array.from(new Set(names)).filter(Boolean) as string[];
+              if (uniqueNames.length > 0) {
+                metWithMap[enc.person_id] = uniqueNames;
+              }
+            });
+          }
+        }
+      }
+
+      const peopleWithMet = mappedPeople.map((p) => ({
+        ...p,
+        metWith: metWithMap[p.id] || [],
+      }));
+
+      setPeople(peopleWithMet as Person[]);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -191,7 +303,7 @@ export default function Dashboard() {
                 Recent Connections
               </h3>
               <div className="space-y-3 max-h-[468px] overflow-y-auto">
-                {people.map((person) => (
+                {people.map((person: Person & { metWith?: string[] }) => (
                   <div
                     key={person.id}
                     className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition"
@@ -215,6 +327,9 @@ export default function Dashboard() {
                       )}
                       {person.description && (
                         <p className="text-sm text-gray-700 mt-1">{person.description}</p>
+                      )}
+                      {person.metWith && person.metWith.length > 0 && (
+                        <p className="text-xs text-gray-500 mt-1">Met with: {person.metWith.join(', ')}</p>
                       )}
 
                     </div>
